@@ -1,0 +1,9 @@
+webページの構造の都合上、top_predictions = predictions[:11]としてください。
+
+また、
+print(f"Found prediction: Trifecta={trifecta}, Probability={probability}%, Odds={odds}")  # デバッグ用出力 
+はコメントアウトしてください
+
+また、probability が10%以上の場合にのみ投資するバージョンのコードでは、投資したレース番号も出力してください
+
+それでは、過去半年間のレースで検証したいとおもいます。
