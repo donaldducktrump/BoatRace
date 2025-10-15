@@ -1,0 +1,12 @@
+boatrace/*
+Analysis/data/*
+venv/*
+*.png
+*.txt
+*.pkl
+*.csv
+*.log
+*.pdf
+*.pyd
+*.dll
+*.lib
