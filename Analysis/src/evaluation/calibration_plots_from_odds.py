@@ -395,9 +395,11 @@ def make_calibration_plot(pred: np.ndarray, truth: np.ndarray, title: str, out_p
     plt.xlabel('Predicted probability')
     plt.ylabel('Empirical probability')
     plt.title(title)
-    plt.xlim(0, 1)
-    plt.ylim(0, 1)
+    # plt.xlim(0, 1)
+    # plt.ylim(0, 1)
     plt.grid(alpha=0.3)
+    plt.xscale("log")
+    plt.yscale("log")
     plt.legend()
     plt.tight_layout()
     plt.savefig(out_path)
@@ -405,13 +407,18 @@ def make_calibration_plot(pred: np.ndarray, truth: np.ndarray, title: str, out_p
 
 
 def main():
-    _setup_japanese_font()
+    font_name = _setup_japanese_font()
+    print(f"[setup] フォント: {font_name or '既定 (英字フォント)'}", flush=True)
     ensure_outdir(OUT_DIR)
+    print(f"[setup] 出力先: {OUT_DIR}", flush=True)
 
     # Load winners (truth)
+    print(f"[load] Kファイルから着順(1-2-3)を抽出中...", flush=True)
     winners = parse_k_winners()
     if winners.empty:
         print("No winners parsed from K files. Check raw_data/k_data.")
+    else:
+        print(f"[load] winners: {len(winners)} レース", flush=True)
     # Prepare truth long format per boat
     truths = []
     for _, r in winners.iterrows():
@@ -430,17 +437,26 @@ def main():
         truth_df["RaceID"] = truth_df["RaceID"].astype(str)
 
     # Load boards
+    tri_files = sorted(glob.glob(os.path.join(TRIFECTA_DIR, "*", "trifecta_*.csv")))
+    print(f"[load] 三連単オッズCSV: {len(tri_files)} ファイル検出", flush=True)
     tri_ordered = load_trifecta_board()
-    trio_unordered = load_trio_board()
+    print(f"[load] 三連単行数: {len(tri_ordered)}", flush=True)
+    # trio_files = sorted(glob.glob(os.path.join(TRIO_DIR, "*", "trio_*.csv")))
+    # print(f"[load] 三連複オッズCSV: {len(trio_files)} ファイル検出 (単勝系では未使用)", flush=True)
+    # trio_unordered = load_trio_board()
 
     # Load win/place
+    print(f"[load] 単勝/複勝オッズを読込中... {ODDS_CSV}", flush=True)
     wp = load_win_place_odds()
+    print(f"[load] 単勝/複勝行数: {len(wp)}", flush=True)
 
     # Compute probabilities per bet type
     # 三連単 marginals（控除率 r/odds 使用）
+    print("[calc] 三連単から周辺確率(1/2/3着)を算出中 (r/odds)...", flush=True)
     p_marg_tri = compute_marginals_from_trifecta_takeout(tri_ordered, TAKEOUT_RATE) if not tri_ordered.empty else pd.DataFrame(columns=["RaceID", "Boat", "p1", "p2", "p3"])
     if not p_marg_tri.empty:
         p_marg_tri["RaceID"] = p_marg_tri["RaceID"].astype(str)
+    print(f"[calc] 三連単マージン: {len(p_marg_tri)} 行", flush=True)
     # 三連複/拡連複は単勝系では使わない
     p_top3_trio = pd.DataFrame(columns=["RaceID", "Boat", "p_top3"]) 
     p_top3_wide = pd.DataFrame(columns=["RaceID", "Boat", "p_top3"]) 
@@ -448,11 +464,13 @@ def main():
     # 単勝（控除率を使用: p = r / odds）
     if not wp.empty:
         wp2 = wp.rename(columns={"レースID": "RaceID"})
+        print("[calc] 単勝確率 p = r/odds を算出中...", flush=True)
         win_probs = prob_from_odds_takeout(wp2.dropna(subset=["win_odds"]).copy(), "win_odds", "p1_win", TAKEOUT_RATE)[
             ["RaceID", "Boat", "p1_win"]
         ]
         if not win_probs.empty:
             win_probs["RaceID"] = win_probs["RaceID"].astype(str)
+        print(f"[calc] 単勝確率行数: {len(win_probs)}", flush=True)
         place_probs = pd.DataFrame(columns=["RaceID", "Boat", "p_top2_place"])  # 複勝は出力しない
     else:
         win_probs = pd.DataFrame(columns=["RaceID", "Boat", "p1_win"]) 
@@ -465,6 +483,7 @@ def main():
     if not win_probs.empty:
         df = base.merge(win_probs, on=["RaceID", "Boat"], how="inner")
         if not df.empty:
+            print("[plot] 単勝: 1着 -> tansho_1st.png", flush=True)
             make_calibration_plot(df["p1_win"].values, df["is1"].values, title="単勝: 1着", out_path=os.path.join(OUT_DIR, "tansho_1st.png"))
 
     # 複勝はスキップ
@@ -474,18 +493,23 @@ def main():
     if not p_marg_tri.empty:
         df = base.merge(p_marg_tri, on=["RaceID", "Boat"], how="inner")
         if not df.empty:
+            print("[plot] 二連単: 1着 -> niren_tan_1st.png", flush=True)
             make_calibration_plot(df["p1"].clip(0,1).values, df["is1"].values, title="二連単: 1着 (三連単オッズ由来, r/odds)", out_path=os.path.join(OUT_DIR, "niren_tan_1st.png"))
+            print("[plot] 二連単: 2着 -> niren_tan_2nd.png", flush=True)
             make_calibration_plot(df["p2"].clip(0,1).values, df["is2"].values, title="二連単: 2着 (三連単オッズ由来, r/odds)", out_path=os.path.join(OUT_DIR, "niren_tan_2nd.png"))
 
     # 三連単 (1,2,3着) – 同様に r/odds 周辺化
     if not p_marg_tri.empty:
         df = base.merge(p_marg_tri, on=["RaceID", "Boat"], how="inner")
         if not df.empty:
+            print("[plot] 三連単: 1着 -> sanren_tan_1st.png", flush=True)
             make_calibration_plot(df["p1"].clip(0,1).values, df["is1"].values, title="三連単: 1着 (r/odds)", out_path=os.path.join(OUT_DIR, "sanren_tan_1st.png"))
+            print("[plot] 三連単: 2着 -> sanren_tan_2nd.png", flush=True)
             make_calibration_plot(df["p2"].clip(0,1).values, df["is2"].values, title="三連単: 2着 (r/odds)", out_path=os.path.join(OUT_DIR, "sanren_tan_2nd.png"))
+            print("[plot] 三連単: 3着 -> sanren_tan_3rd.png", flush=True)
             make_calibration_plot(df["p3"].clip(0,1).values, df["is3"].values, title="三連単: 3着 (r/odds)", out_path=os.path.join(OUT_DIR, "sanren_tan_3rd.png"))
 
-    print(f"Saved calibration plots to: {OUT_DIR}")
+    print(f"[done] 画像保存先: {OUT_DIR}")
 
 
 if __name__ == "__main__":

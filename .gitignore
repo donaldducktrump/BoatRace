@@ -1,6 +1,8 @@
 boatrace/*
 Analysis/data/*
 venv/*
+ML_pred/
+Poseidon/
 *.png
 *.txt
 *.pkl
